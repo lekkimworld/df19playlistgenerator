@@ -16,7 +16,7 @@ try {
 
 const youtubeApiRequest = (endpoint, access_token, params) => {
     return new Promise((resolve, reject) => {
-        let url = `https://www.googleapis.com/youtube/v3${endpoint}?part=snippet%2Cstatus`
+        let url = `https://www.googleapis.com/youtube/v3${endpoint}?part=snippet%2Cstatus&key=${process.env.YOUTUBE_APIKEY}`
         let options = {
             'method': 'post', 
             'headers': {
