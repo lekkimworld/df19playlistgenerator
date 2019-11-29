@@ -1,0 +1,177 @@
+<div class="jumbotron mt-2">
+    <h1>Dreamforce 2019 Playlist Generator</h1>
+    <p>
+        Below are the sessions from Dreamforce 2019 listed by date of the 
+        session. To generate a Youtube playlist specify a name for the playlist, 
+        select the sessions to include and click Create. Please note that Youtube 
+        can have multiple playlists with the same name. 
+    </p>
+</div>
+<div class="container-fluid" id="container">
+    <div class="form-group row">
+        <label for="playlist_name" class="col-lg-2 col-md-2 col-sm-12 col-form-label">Playlist Name</label>
+        <div class="col-lg-8 col-md-8 col-sm-12">
+            <input type="text" id="playlist_name" name="playlist_name" placeholder="Specify name for playlist" class="form-control" />
+        </div>
+        <div class="col-lg-2 col-md-2 col-sm-12">
+            <button id="create" type="button" class="btn btn-success w-100" disabled="disabled">Create</button>
+        </div>
+    </div>
+    <div class="form-group row">
+        <label for="filter" class="col-lg-2 col-md-2 col-sm-12 col-form-label">Filter</label>
+        <div class="col-lg-10 col-md-10 col-sm-12">
+            <input type="text" id="filter" name="Filter" placeholder="Type to filter list" class="form-control" />
+        </div>
+    </div>
+    <div id="data"></div>
+</div>
+<script type="text/javascript">
+    const TYPE_SEARCH_DELAY = 500
+    const loadData = (filter) => {
+        fetch(`/data/${filter ? filter : ''}`, {'credentials': 'same-origin'})
+            .then(resp => {
+                return resp.text()
+            }).then(JSON.parse).then(data => {
+                let parent = document.getElementById('data')
+                parent.innerHTML = ''
+                let buildLink = (label, link) => {
+                    let a = document.createElement('a')
+                    a.href = link
+                    a.target = '_new'
+                    a.appendChild(document.createTextNode(label))
+                    return a
+                }
+                let buildCheckbox = (label, value) => {
+                    let i = document.createElement('input')
+                    i.type = 'checkbox'
+                    i.value = value
+                    return i
+                }
+                let buildRow = (header, cells, widths) => {
+                    let tr = document.createElement('tr')
+                    cells.forEach((cell, idx) => {
+                        let e = document.createElement(header ? 'th' : 'td')
+                        if (widths && widths.length > idx && widths[idx] > 0) e.width = `${widths[idx]}px`
+                        if (typeof cell === 'string') {
+                            e.appendChild(document.createTextNode(cell))
+                        } else {
+                            e.appendChild(cell)
+                        }
+                        tr.appendChild(e)
+                    })
+                    return tr
+                }
+                Object.keys(data).forEach(key => {
+                    let h2 = document.createElement('h2')
+                    h2.appendChild(document.createTextNode(key))
+                    parent.appendChild(h2)
+                    let t = document.createElement('table')
+                    t.className = 'table table-sm'
+                    parent.appendChild(t)
+
+                    // build head
+                    let thead = document.createElement('thead')
+                    t.appendChild(thead)
+                    thead.appendChild(buildRow(true, ['', 'Time', 'Title', 'YouTube Link'], [30, 200, -1, 125]))
+
+                    // build body
+                    let tbody = document.createElement('tbody')
+                    t.appendChild(tbody)
+                    if (data[key].length) {
+                        data[key].forEach(session => {
+                            tbody.appendChild(
+                                buildRow(false, 
+                                    [
+                                        buildCheckbox('', session.id), 
+                                        session.time, 
+                                        session.title, 
+                                        buildLink('YouTube', session.url.youtube)
+                                    ]
+                                )
+                            )
+                        })
+                    } else {
+                        let tr = document.createElement('tr')
+                        let td = document.createElement('td')
+                        tr.appendChild(td)
+                        td = document.createElement('td')
+                        td.setAttribute('colspan', '3')
+                        td.appendChild(document.createTextNode('No sessions matching filter'))
+                        tr.appendChild(td)
+                        tbody.appendChild(tr)
+                    }
+                })
+            })
+    }
+
+    let ids = new Set()
+    document.getElementById('container').addEventListener('click', (event) => {
+        let src = event.srcElement
+        if (src.localName === 'button') {
+            let name = document.getElementById('playlist_name').value
+            if (!name || !name.trim().length) {
+                alert('Please specify a playlist name before continuing...')
+                return
+            }
+
+            // confirm
+            if (!confirm('Are you sure?')) return
+
+            // create
+            let videoIds = Array.from(ids)
+            ids = new Set()
+            fetch('/create_playlist', 
+                {
+                    'credentials': 'same-origin',
+                    'method': 'post',
+                    'headers': {
+                        'Content-Type': 'application/json'
+                    },
+                    'body': JSON.stringify({
+                        'name': name,
+                        'youtube_ids': videoIds
+                    })
+                }).then(resp => {
+                    if (resp.status === 201 || resp.status === 204) {
+                        alert(`Created playlist called '${name}'' with ${videoIds.length} videos.`)
+                    }
+                })
+        } else if (src.localName === 'input' && src.type === 'checkbox') {
+            if (src.checked && src.value) {
+                ids.add(src.value)
+            } else {
+                ids.delete(src.value)
+            }
+            let btn = document.querySelector('#container button:first-of-type')
+            if (ids.size) {
+                btn.removeAttribute('disabled')
+            } else {
+                btn.setAttribute('disabled', 'disabled')
+            }
+        }
+    })
+    let handle
+    let lastQuery = ''
+    document.getElementById('container').addEventListener('keyup', (event) => {
+        if (event.srcElement.id !== 'filter') return
+        window.clearTimeout(handle)
+        handle = window.setTimeout(() => {
+            let filter = document.getElementById('filter').value.toLowerCase()
+            if (lastQuery === filter) return
+            console.log(`Typeahead filter: <${filter}> (last <${lastQuery}>)`)
+            lastQuery = filter
+            loadData(lastQuery)
+        }, TYPE_SEARCH_DELAY)
+        event.preventDefault()
+    })
+
+    // load all data
+    loadData()
+</script>
+<style type="text/css">
+@media (max-width: 767px) {
+    .col-sm-12 {
+        margin-top: 10px;
+    }
+}
+</style>
